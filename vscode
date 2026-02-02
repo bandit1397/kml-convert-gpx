@@ -1,0 +1,82 @@
+from xml.etree import ElementTree as ET
+from pathlib import Path
+
+# GPX 1.1 기본 네임스페이스
+NS = "http://www.topografix.com/GPX/1/1"
+ET.register_namespace("", NS)
+
+def q(tag: str) -> str:
+    """네임스페이스가 포함된 태그명 생성"""
+    return f"{{{NS}}}{tag}"
+
+def minimalize_gpx(in_path: str, out_path: str, creator: str = "minimal-gpx"):
+    """
+    GPX를 '지도용 최소'로 축소:
+    - wpt: lat/lon + name만 유지
+    - trk: name(있으면) + trkseg + trkpt(lat/lon)만 유지
+    - ele/time/desc/sym/extensions 등은 제거
+    """
+    in_path = str(in_path)
+    out_path = str(out_path)
+
+    # 1) 원본 파싱
+    src_root = ET.parse(in_path).getroot()
+
+    # 2) 결과 루트 생성 (GPX 1.1)
+    dst_root = ET.Element(q("gpx"), {
+        "version": "1.1",
+        "creator": creator,
+    })
+
+    # 3) Waypoints: lat/lon + name만
+    for wpt in src_root.findall(q("wpt")):
+        lat = wpt.get("lat")
+        lon = wpt.get("lon")
+        if not lat or not lon:
+            continue
+
+        dwpt = ET.SubElement(dst_root, q("wpt"), {"lat": lat, "lon": lon})
+
+        name_el = wpt.find(q("name"))
+        name_txt = (name_el.text or "").strip() if name_el is not None else ""
+        if name_txt:
+            ET.SubElement(dwpt, q("name")).text = name_txt
+        # 이름이 없으면 name 태그를 아예 만들지 않음 (원하면 기본값 넣을 수 있음)
+
+    # 4) Tracks: trk name(있으면) + trkseg + trkpt(lat/lon)만
+    for trk in src_root.findall(q("trk")):
+        dtrk = ET.SubElement(dst_root, q("trk"))
+
+        trk_name_el = trk.find(q("name"))
+        trk_name_txt = (trk_name_el.text or "").strip() if trk_name_el is not None else ""
+        if trk_name_txt:
+            ET.SubElement(dtrk, q("name")).text = trk_name_txt
+
+        for seg in trk.findall(q("trkseg")):
+            dseg = ET.SubElement(dtrk, q("trkseg"))
+
+            for pt in seg.findall(q("trkpt")):
+                plat = pt.get("lat")
+                plon = pt.get("lon")
+                if not plat or not plon:
+                    continue
+                ET.SubElement(dseg, q("trkpt"), {"lat": plat, "lon": plon})
+
+    # 5) 저장 (UTF-8, XML 선언 포함)
+    ET.ElementTree(dst_root).write(out_path, encoding="UTF-8", xml_declaration=True)
+
+def main():
+    # ✅ 사용자 입력 파일 (윈도우 경로)
+    input_file = r"C:\Users\user\Desktop\gpx\patrol_2025-11-24.gpx"
+
+    # ✅ 출력 파일 (같은 폴더에 _minimal 붙여서 저장)
+    p = Path(input_file)
+    output_file = str(p.with_name(p.stem + "_minimal.gpx"))
+
+    minimalize_gpx(input_file, output_file, creator="minimal-gpx")
+    print("완료!")
+    print("입력:", input_file)
+    print("출력:", output_file)
+
+if __name__ == "__main__":
+    main()
