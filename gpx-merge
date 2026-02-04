@@ -1,0 +1,86 @@
+import xml.etree.ElementTree as ET
+
+# =========================
+# 여기에 합칠 GPX 파일만 적어주세요
+# =========================
+INPUT_FILES = [
+    "계남공원1_minimal.gpx",
+    "계남공원2_minimal.gpx",
+    "계남공원3_minimal.gpx",
+    "계남공원4_minimal.gpx",
+    "계남공원5_minimal.gpx",
+    "계남공원6_minimal.gpx",
+    "계남공원7_minimal.gpx",
+    "계남공원8_minimal.gpx",
+    "계남공원9_minimal.gpx",
+    "계남공원10_minimal.gpx",
+]
+
+OUTPUT_FILE = "merged.gpx"
+
+GPX_NS = "http://www.topografix.com/GPX/1/1"
+NS = f"{{{GPX_NS}}}"
+
+ET.register_namespace("", GPX_NS)
+
+# =========================
+# 새 GPX 루트
+# =========================
+gpx_out = ET.Element(
+    f"{NS}gpx",
+    {
+        "version": "1.1",
+        "creator": "leaflet-safe-merge"
+    }
+)
+
+trk_index = 1
+
+# =========================
+# 병합 시작
+# =========================
+for file_path in INPUT_FILES:
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    # ---- waypoint 그대로 복사 ----
+    for wpt in root.findall(f"{NS}wpt"):
+        gpx_out.append(wpt)
+
+    # ---- track 그대로 복사 (절대 연결 금지) ----
+    for trk in root.findall(f"{NS}trk"):
+        new_trk = ET.SubElement(gpx_out, f"{NS}trk")
+
+        name = trk.find(f"{NS}name")
+        name_el = ET.SubElement(new_trk, f"{NS}name")
+
+        if name is not None and name.text:
+            name_el.text = f"{name.text}_trk_{trk_index}"
+        else:
+            name_el.text = f"merged_trk_{trk_index}"
+
+        for trkseg in trk.findall(f"{NS}trkseg"):
+            new_seg = ET.SubElement(new_trk, f"{NS}trkseg")
+
+            for trkpt in trkseg.findall(f"{NS}trkpt"):
+                ET.SubElement(
+                    new_seg,
+                    f"{NS}trkpt",
+                    {
+                        "lat": trkpt.attrib["lat"],
+                        "lon": trkpt.attrib["lon"]
+                    }
+                )
+
+        trk_index += 1
+
+# =========================
+# 저장
+# =========================
+ET.ElementTree(gpx_out).write(
+    OUTPUT_FILE,
+    encoding="utf-8",
+    xml_declaration=True
+)
+
+print(f"✅ 병합 완료 → {OUTPUT_FILE}")
